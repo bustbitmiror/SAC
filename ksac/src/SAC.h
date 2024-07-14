@@ -7,7 +7,7 @@ extern "C" {
 }
 
 #include "SACCommon.h"
-
+#include "SACDeviceControl.h"
 
 
 // Definitions.
@@ -22,3 +22,6 @@ constexpr SIZE_T REGISTERED_OB_CALLBACKS = 2;
 NTSTATUS SACEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath);
 DRIVER_UNLOAD SACUnload;
 DRIVER_DISPATCH SACDeviceControl, SACCreateClose;
+
+bool InitializeFeatures();
+void ClearAll();

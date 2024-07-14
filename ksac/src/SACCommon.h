@@ -2,22 +2,19 @@
 
 #include "pch.h"
 
-
+#define PRINTS
 #define DRIVER_REFLECTIVELY_LOADED
 #define DRIVER_TAG 'hdiS'
 #define DRIVER_PREFIX "SAC: "
 constexpr SIZE_T MAX_PATH = 260;
 
 
-void debug_print(PCSTR text) {
-
-#ifndef DEBUG
-	UNREFERENCED_PARAMETER(text);
-#endif // !DEBUG
-
-
-	KdPrintEx((DPFLTR_IHVDRIVER_ID, DPFLTR_INFO_LEVEL, text));
-}
+#ifdef PRINTS
+typedef ULONG(NTAPI* tDbgPrint)(PCSTR Format, ...);
+constexpr tDbgPrint Print = DbgPrint;
+#else
+constexpr VOID Print(...) {};
+#endif
 
 
 inline PVOID RegistrationHandle = NULL;
