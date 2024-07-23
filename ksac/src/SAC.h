@@ -7,11 +7,13 @@ extern "C" {
 }
 
 #include "SACCommon.h"
+#include "ProcessUtils.h"
 #include "SACDeviceControl.h"
 
 
+
 // Definitions.
-constexpr SIZE_T REGISTERED_OB_CALLBACKS = 2;
+constexpr SIZE_T REGISTERED_OB_CALLBACKS = 1;
 #define DRIVER_NAME L"\\Driver\\sac"
 #define DRIVER_DEVICE_NAME L"\\Device\\sac"
 #define DRIVER_SYMBOLIC_LINK L"\\??\\sac"

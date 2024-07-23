@@ -8,7 +8,9 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
 	Features.DriverReflectivelyLoaded = true;
 
 
-	Print(DRIVER_PREFIX "Driver is being reflectively loaded...\n");
+	//Print(DRIVER_PREFIX "Driver is being reflectively loaded...\n");
+	debug_print(DRIVER_PREFIX "Driver is being reflectively loaded...\n");
+
 
 	UNICODE_STRING driverName = RTL_CONSTANT_STRING(DRIVER_NAME);
 	UNICODE_STRING routineName = RTL_CONSTANT_STRING(L"IoCreateDriver");
@@ -21,14 +23,17 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) 
 	NTSTATUS status = IoCreateDriver(&driverName, &SACEntry);
 
 	if (!NT_SUCCESS(status)) {
-		Print(DRIVER_PREFIX "Failed to create driver: (0x%08X)\n", status);
+		//Print(DRIVER_PREFIX "Failed to create driver: (0x%08X)\n", status);
+		debug_print(DRIVER_PREFIX "Failed to create driver\n");
 	}
 
 	return status;
 
-#endif
+#else
 
 	return SACEntry(DriverObject, RegistryPath);
+
+#endif
 }
 
 
@@ -51,7 +56,8 @@ NTSTATUS SACEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 	status = IoCreateDevice(DriverObject, 0, &deviceName, FILE_DEVICE_UNKNOWN, FILE_DEVICE_SECURE_OPEN, FALSE, &DeviceObject);
 
 	if (!NT_SUCCESS(status)) {
-		Print(DRIVER_PREFIX "Failed to create device: (0x%08X)\n", status);
+		//Print(DRIVER_PREFIX "Failed to create device: (0x%08X)\n", status);
+		debug_print(DRIVER_PREFIX "Failed to create device.\n");
 		ClearAll();
 		return status;
 	}
@@ -59,24 +65,25 @@ NTSTATUS SACEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 	status = IoCreateSymbolicLink(&symbolicLink, &deviceName);
 
 	if (!NT_SUCCESS(status)) {
-		Print(DRIVER_PREFIX "Failed to create symbolic link: (0x%08X)\n", status);
+		//Print(DRIVER_PREFIX "Failed to create symbolic link: (0x%08X)\n", status);
+		debug_print(DRIVER_PREFIX "Failed to create symbolic link.\n");
 		IoDeleteDevice(DeviceObject);
 		ClearAll();
 		return status;
 	}
 
 	if (!Features.DriverReflectivelyLoaded) {
-		/*OB_OPERATION_REGISTRATION operations[] = {
+		OB_OPERATION_REGISTRATION operations[] = {
 		{
 			PsProcessType,
 			OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE,
 			OnPreOpenProcess, nullptr
-		},
-		{
+		}
+		/*{
 			PsThreadType,
 			OB_OPERATION_HANDLE_CREATE | OB_OPERATION_HANDLE_DUPLICATE,
 			OnPreOpenThread, nullptr
-		}
+		}*/
 		};
 		OB_CALLBACK_REGISTRATION registrationCallbacks = {
 			OB_FLT_REGISTRATION_VERSION,
@@ -89,13 +96,15 @@ NTSTATUS SACEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 		status = ObRegisterCallbacks(&registrationCallbacks, &RegistrationHandle);
 
 		if (!NT_SUCCESS(status)) {
-			Print(DRIVER_PREFIX "Failed to register process callback: (0x%08X)\n", status);
+			//Print(DRIVER_PREFIX "Failed to register process callback: (0x%08X)\n", status);
+			debug_print(DRIVER_PREFIX "Failed to register process callback\n");
+			dbg("text");
 			status = STATUS_SUCCESS;
 			Features.ProcessProtection = false;
-			Features.ThreadProtection = false;
+			//Features.ThreadProtection = false;
 		}
 
-		status = CmRegisterCallbackEx(OnRegistryNotify, &regAltitude, DriverObject, nullptr, &NidhoggRegistryUtils->RegCookie, nullptr);
+		/*status = CmRegisterCallbackEx(OnRegistryNotify, &regAltitude, DriverObject, nullptr, &NidhoggRegistryUtils->RegCookie, nullptr);
 
 		if (!NT_SUCCESS(status)) {
 			Print(DRIVER_PREFIX "Failed to register registry callback: (0x%08X)\n", status);
@@ -114,13 +123,15 @@ NTSTATUS SACEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath) {
 
 	//ExecuteInitialOperations();
 
-	Print(DRIVER_PREFIX "Initialization finished.\n");
+	//Print(DRIVER_PREFIX "Initialization finished.\n");
+	debug_print(DRIVER_PREFIX "Initialization finished.\n");
 	return status;
 }
 
 
 void SACUnload(PDRIVER_OBJECT DriverObject) {
-	Print(DRIVER_PREFIX "Unloading...\n");
+	//Print(DRIVER_PREFIX "Unloading...\n");
+	debug_print(DRIVER_PREFIX "Unloading...\n");
 
 	/*if (Features.RegistryFeatures) {
 		NTSTATUS status = CmUnRegisterCallback(NidhoggRegistryUtils->RegCookie);
@@ -133,10 +144,10 @@ void SACUnload(PDRIVER_OBJECT DriverObject) {
 	ClearAll();
 
 	// To avoid BSOD.
-	/*if (Features.ThreadProtection && Features.ProcessProtection && RegistrationHandle) {
+	if (Features.ThreadProtection && Features.ProcessProtection && RegistrationHandle) {
 		ObUnRegisterCallbacks(RegistrationHandle);
 		RegistrationHandle = NULL;
-	}*/
+	}
 
 	UNICODE_STRING symbolicLink = RTL_CONSTANT_STRING(DRIVER_SYMBOLIC_LINK);
 	IoDeleteSymbolicLink(&symbolicLink);
@@ -172,6 +183,36 @@ bool InitializeFeatures() {
 	if (WindowsBuildNumber < WIN_1507) {
 		return false;
 	}
+
+	// Initialize utils.
+	SACProcessUtils = new ProcessUtils();
+
+	if (!SACProcessUtils)
+		return false;
+
+
+
+	// Initialize functions.
+	if (!(PULONG)MmCopyVirtualMemory)
+		Features.ReadData = false;
+
+	if (!(PULONG)ZwProtectVirtualMemory || !Features.ReadData)
+		Features.WriteData = false;
+
+	if (!Features.WriteData || !(PULONG)PsGetProcessPeb)
+		Features.FunctionPatching = false;
+
+	if (!(PULONG)PsGetProcessPeb || !(PULONG)PsLoadedModuleList || !&PsLoadedModuleResource)
+		Features.ModuleHiding = false;
+
+	if (!(PULONG)ObReferenceObjectByName)
+		Features.FileProtection = false;
+
+	if (!(PULONG)KeInsertQueueApc)
+		Features.EtwTiTamper = false;
+
+	if (!(PULONG)KeInitializeApc || !(PULONG)KeInsertQueueApc || !(PULONG)KeTestAlertThread || !(PULONG)ZwQuerySystemInformation)
+		Features.ApcInjection = false;
 
 
 	return true;
